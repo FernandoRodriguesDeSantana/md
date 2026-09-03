@@ -33,17 +33,16 @@ Disso decorre um requisito que **não é evidente**: não basta que o DMA susten
 
 Somam-se a isso **80 kB de memória**, dos quais `64 kB` correspondem à tabela de onda em buffer duplo. O buffer duplo é exigido pelo *ajuste de simetria das rampas*: alterar a simetria significa reescrever a tabela enquanto ela está sendo lida, o que produziria uma onda híbrida durante a transição.
 
-### Conversores de controle
+### Ajuste de amplitude e offset
 
-O ajuste de **offset** é feito por um conversor de saída em **tensão**, somada ao sinal no nó de terra virtual do estágio final. A exigência é precisão, não velocidade, já que o valor só muda por ação do usuário.
+Estes ajustes não passam pelo conversor de síntese, que trabalha **sempre em escala completa**. Escalar os números da tabela para reduzir amplitude custaria resolução efetiva, e a qualidade passaria a depender da amplitude selecionada.
 
-O ajuste de **amplitude** é feito por um **conversor multiplicador (MDAC)** na malha de realimentação do estágio de ganho, comandado por *código digital*. Ele atua como rede resistiva variável, preservando a precisão de conversor e mantendo a distorção desprezível no caminho do sinal.
-
-> O conversor de síntese trabalha **sempre em escala completa**. Escalar os números da tabela para reduzir amplitude custaria resolução efetiva, e a qualidade passaria a depender da amplitude selecionada.
+- **Offset:** conversor de saída em tensão, somada ao sinal no nó de terra virtual do estágio final. Resolvido por um dos conversores internos do microcontrolador.
+- **Amplitude:** **conversor multiplicador (MDAC)** na malha de realimentação do estágio de ganho, comandado por *código digital*. Atua como rede resistiva variável, preservando precisão e mantendo a distorção desprezível no caminho do sinal.
 
 ---
 
-## Escolha do conversor D/A
+## Escolha do conversor D/A de síntese
 
 ### Requisitos
 
@@ -64,31 +63,18 @@ O **registrador de entrada** é o requisito menos óbvio e o mais decisivo. Sem 
 
 | Conversor | Características | Avaliação |
 |---|---|---|
-| **AD5689** | 2 canais, 16 bits, saída em tensão, comunicação SPI [2] | Atualização serial e tempo de acomodação o excluem do caminho de síntese. ***Adotado para o controle de offset***, onde a exigência é precisão; o segundo canal atende ao limiar de comparador |
-| **DAC0808** | 8 bits, entrada paralela, saída em corrente, acomodação típica de 150 ns [3] | Resolução insuficiente, sem registrador de entrada e sem *glitch* especificado. A acomodação típica de `150 ns` é incompatível com o período de `100 ns`. ***Adotado na versão preliminar de bancada*** |
-| **Conversor de síntese de 12 bits** | Entrada paralela com *latch* por borda, arquitetura segmentada, saídas diferenciais em corrente de 2 a 20 mA, referência interna, alimentação única de 2,7 a 5,5 V | ***Adotado na versão final*** |
+| **AD5689** | 2 canais, 16 bits, saída em tensão, comunicação SPI [2] | ***Descartado.*** A atualização serial e o tempo de acomodação limitam a taxa a valores muito abaixo dos 10 MS/s. A resolução de 16 bits favorece a precisão, mas não compensa a limitação de velocidade |
+| **DAC0808** | 8 bits, entrada paralela, saída em corrente, acomodação típica de 150 ns [3] | ***Descartado.*** Resolução de `50 dB` contra os `74 dB` necessários, ausência de registrador de entrada, *glitch* não especificado, e acomodação típica de `150 ns` incompatível com o período de `100 ns` — valor que, além disso, não tem máximo garantido |
+| **Conversor paralelo de síntese, 12 bits** | *Latch* por borda, arquitetura segmentada, saídas diferenciais em corrente de 2 a 20 mA, referência interna, alimentação única de 2,7 a 5,5 V, taxa de 125 a 165 MS/s | ***Escolhido.*** Único que atende aos seis requisitos simultaneamente |
 
-### Vantagens do conversor da versão final
+### Vantagens do conversor escolhido
 
-- **Alimentação mais simples.** Fonte única, sem trilho negativo dedicado ao conversor.
+- **Alimentação simples.** Fonte única, sem trilho negativo dedicado ao conversor.
 - **Sem deslocamento de nível.** O trilho digital pode ser `3,3 V`, ligado diretamente ao microcontrolador.
 - **Menor acoplamento digital.** Operar com excursão lógica reduzida diminui o *feedthrough* de dados e o ruído interno do conversor.
+- **Margem de taxa.** Os `125 a 165 MS/s` disponíveis contra os `10 MS/s` exigidos eliminam a acomodação como fator limitante.
 
-Nenhum desses componentes está disponível em encapsulamento DIP. Para montagem manual, prefira **SOIC** (passo de `1,27 mm`) a **TSSOP** (`0,65 mm`).
-
-### Versão preliminar com o DAC0808
-
-O DAC0808 é adotado como **etapa de validação**. Uma versão limitada a `20 kHz`, com amostragem em `3 MS/s`, permite construir e depurar toda a cadeia analógica — a parte difícil e demorada — sem lidar simultaneamente com barramento de alta velocidade, montagem SMD e integridade de sinal:
-
-```
-fs = 3 MS/s,  fmáx = 20 kHz,  corte do filtro = 400 kHz
-Primeira imagem: 2,98 MHz  →  2,90 oitavas
-Filtro de 4ª ordem: 69,5 dB de rejeição
-```
-
-Os `3 MS/s` derivam da margem de acomodação. O período de `333 ns` oferece **2,2 vezes** o tempo típico de 150 ns, sobre um parâmetro que o fabricante *não garante com valor máximo*.
-
-> Nessa versão a ausência de registrador de entrada persiste. Ou se acrescenta um ***latch* externo de 8 bits** comandado pelo mesmo sinal que dispara o DMA, ou a degradação é aceita e documentada.
+Nenhum componente dessa classe está disponível em encapsulamento DIP. Para montagem manual, prefira **SOIC** (passo de `1,27 mm`) a **TSSOP** (`0,65 mm`).
 
 ---
 
@@ -108,7 +94,7 @@ Os `3 MS/s` derivam da margem de acomodação. O período de `333 ns` oferece **
 
 O **STM32G474** é o único candidato projetado explicitamente para aplicações de *sinal misto*.
 
-- Seus **7 conversores** e **7 comparadores** internos, contra 2 e 2 do STM32H743, resolvem o offset, os limiares do caminho da onda retangular e ainda deixam canais livres para proteção e detecção de sobrecarga.
+- Seus **7 conversores** e **7 comparadores** internos, contra 2 e 2 do STM32H743, resolvem o **offset**, os limiares do caminho da onda retangular e ainda deixam canais livres para proteção e detecção de sobrecarga. Isso elimina componentes externos que as demais opções exigiriam.
 - O **domínio de alimentação único** é consideravelmente mais simples de projetar que os múltiplos domínios com sequenciamento do H743.
 - A **ausência de cache** elimina uma classe inteira de erros de coerência em buffers de DMA.
 - O temporizador de alta resolução de `184 ps` — presente nas variantes **G474** e **G484**, mas *não* em toda a família G4 — oferece resolução de ciclo de trabalho cerca de **onze vezes superior** à do periférico equivalente no H743.
