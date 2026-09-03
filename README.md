@@ -2,7 +2,7 @@
 
 ## Requisitos do projeto
 
-O gerador deve produzir ondas **senoidal**, **triangular**, **dente de serra** e **retangular**, de `1 Hz` a `100 kHz`, com amplitude ajustável até `10 Vpp` e offset de `-5 V` a `+5 V`. A síntese é digital, por *acumulador de fase*, com conversor D/A externo de **12 bits** operando a taxa de amostragem fixa.
+O gerador deve produzir ondas **senoidal**, **triangular**, **dente de serra** e **retangular**, de `1 Hz` a `100 kHz`, com amplitude ajustável até `10 Vpp` e offset de `-5 V` a `+5 V`. A síntese é digital, por *acumulador de fase*, com conversor D/A externo operando a taxa de amostragem fixa.
 
 ---
 
@@ -10,13 +10,17 @@ O gerador deve produzir ondas **senoidal**, **triangular**, **dente de serra** e
 
 ### Taxa de amostragem e resolução
 
-A taxa de amostragem de **10 MS/s** decorre do espectro da onda dente de serra, a mais exigente do conjunto: seus harmônicos decaem como `1/n` e exigem banda até `2 MHz`. Com amostragem em `10 MHz`, as imagens espectrais ficam em `9,9 MHz`, distantes o bastante para que um filtro de 5ª ordem as rejeite em **69 dB**.
+A onda **dente de serra** é a mais exigente do conjunto: seus harmônicos decaem como `1/n` e contemplam ordens pares e ímpares, o que obriga a cadeia analógica a passar até `2 MHz`.
 
-> Esse alvo de rejeição decorre da resolução escolhida: um conversor de 12 bits tem piso de ruído de quantização em `74 dB`, e não faria sentido deixar imagens espectrais acima desse piso. **Taxa de amostragem e resolução são um único requisito expresso em dois eixos.**
+Com amostragem em `10 MHz`, as imagens espectrais surgem em `9,9 MHz`, distantes o bastante para que um filtro de 5ª ordem as rejeite em **69 dB**.
+
+> O alvo de `69 dB` decorre da resolução escolhida: um conversor de **12 bits** tem piso de ruído de quantização em `74 dB`, e não faria sentido deixar imagens espectrais acima desse piso. **Taxa de amostragem e resolução são um único requisito expresso em dois eixos.**
+
+Adota-se, portanto, **12 bits a 10 MS/s**.
 
 ### Arquitetura de geração
 
-O acumulador de fase é executado em ***software***, não pelo DMA. Um DMA circular sobre buffer de comprimento variável produz um sintetizador funcional, mas com resolução de frequência limitada a comprimentos inteiros de buffer, o que é insuficiente para cobrir cinco décadas com ajuste fino.
+O acumulador de fase é executado em ***software***. Um DMA circular sobre buffer de comprimento variável produziria um sintetizador funcional, mas com resolução de frequência limitada a comprimentos inteiros de buffer, insuficiente para cobrir cinco décadas com ajuste fino.
 
 A arquitetura adotada prevê que:
 
@@ -25,15 +29,17 @@ A arquitetura adotada prevê que:
 
 Com *buffer duplo*, enquanto o DMA transmite uma metade, a CPU preenche a outra.
 
-Dessa arquitetura decorre um requisito que **não é evidente**: não basta que o DMA sustente a vazão. A CPU precisa produzir as amostras continuamente, ao custo de aproximadamente **6 ciclos por amostra** em núcleo de 32 bits, o que representa `60 MHz` de carga contínua a 10 MS/s.
+Disso decorre um requisito que **não é evidente**: não basta que o DMA sustente a vazão. A CPU precisa produzir as amostras continuamente, ao custo de aproximadamente **6 ciclos por amostra** em núcleo de 32 bits, o que representa `60 MHz` de carga contínua a 10 MS/s.
 
 Somam-se a isso **80 kB de memória**, dos quais `64 kB` correspondem à tabela de onda em buffer duplo. O buffer duplo é exigido pelo *ajuste de simetria das rampas*: alterar a simetria significa reescrever a tabela enquanto ela está sendo lida, o que produziria uma onda híbrida durante a transição.
 
 ### Conversores de controle
 
-O ajuste de **offset** é feito por um conversor de saída em **tensão**, somada ao sinal no nó de terra virtual do estágio final. Pode ser interno ao microcontrolador.
+O ajuste de **offset** é feito por um conversor de saída em **tensão**, somada ao sinal no nó de terra virtual do estágio final. A exigência é precisão, não velocidade, já que o valor só muda por ação do usuário.
 
-O ajuste de **amplitude** exige um **conversor multiplicador (MDAC)** na malha de realimentação do estágio de ganho, comandado por *código digital*. Ele funciona como rede resistiva variável, com precisão de conversor e distorção desprezível. Um conversor de saída em tensão **não serve** para essa função, pois exigiria um multiplicador analógico ou *VCA* no caminho do sinal, com distorção incompatível com a especificação de `THD < 1%`.
+O ajuste de **amplitude** é feito por um **conversor multiplicador (MDAC)** na malha de realimentação do estágio de ganho, comandado por *código digital*. Ele atua como rede resistiva variável, preservando a precisão de conversor e mantendo a distorção desprezível no caminho do sinal.
+
+> O conversor de síntese trabalha **sempre em escala completa**. Escalar os números da tabela para reduzir amplitude custaria resolução efetiva, e a qualidade passaria a depender da amplitude selecionada.
 
 ---
 
@@ -58,13 +64,21 @@ O **registrador de entrada** é o requisito menos óbvio e o mais decisivo. Sem 
 
 | Conversor | Características | Avaliação |
 |---|---|---|
-| **AD5689** | 2 canais, 16 bits, saída em tensão, comunicação SPI [2] | Atualização serial e tempo de acomodação o excluem do caminho de síntese. ***Adotado para o controle de offset***, onde a exigência é precisão e não velocidade; o segundo canal fica disponível para limiar de comparador |
-| **DAC0808** | 8 bits, entrada paralela, saída em corrente, acomodação típica de 150 ns [3] | ***Não atende***: resolução insuficiente, sem registrador de entrada, sem *glitch* especificado, e a acomodação típica de `150 ns` não é compatível com o período de `100 ns`. **Adotado na versão preliminar** de bancada |
+| **AD5689** | 2 canais, 16 bits, saída em tensão, comunicação SPI [2] | Atualização serial e tempo de acomodação o excluem do caminho de síntese. ***Adotado para o controle de offset***, onde a exigência é precisão; o segundo canal atende ao limiar de comparador |
+| **DAC0808** | 8 bits, entrada paralela, saída em corrente, acomodação típica de 150 ns [3] | Resolução insuficiente, sem registrador de entrada e sem *glitch* especificado. A acomodação típica de `150 ns` é incompatível com o período de `100 ns`. ***Adotado na versão preliminar de bancada*** |
 | **Conversor de síntese de 12 bits** | Entrada paralela com *latch* por borda, arquitetura segmentada, saídas diferenciais em corrente de 2 a 20 mA, referência interna, alimentação única de 2,7 a 5,5 V | ***Adotado na versão final*** |
+
+### Vantagens do conversor da versão final
+
+- **Alimentação mais simples.** Fonte única, sem trilho negativo dedicado ao conversor.
+- **Sem deslocamento de nível.** O trilho digital pode ser `3,3 V`, ligado diretamente ao microcontrolador.
+- **Menor acoplamento digital.** Operar com excursão lógica reduzida diminui o *feedthrough* de dados e o ruído interno do conversor.
+
+Nenhum desses componentes está disponível em encapsulamento DIP. Para montagem manual, prefira **SOIC** (passo de `1,27 mm`) a **TSSOP** (`0,65 mm`).
 
 ### Versão preliminar com o DAC0808
 
-O DAC0808 permanece útil como **etapa de validação**. Uma versão limitada a `20 kHz`, com amostragem em `3 MS/s`, permite construir e depurar toda a cadeia analógica — a parte difícil e demorada — sem lidar simultaneamente com barramento de alta velocidade, montagem em encapsulamento SMD e integridade de sinal:
+O DAC0808 é adotado como **etapa de validação**. Uma versão limitada a `20 kHz`, com amostragem em `3 MS/s`, permite construir e depurar toda a cadeia analógica — a parte difícil e demorada — sem lidar simultaneamente com barramento de alta velocidade, montagem SMD e integridade de sinal:
 
 ```
 fs = 3 MS/s,  fmáx = 20 kHz,  corte do filtro = 400 kHz
@@ -72,17 +86,9 @@ Primeira imagem: 2,98 MHz  →  2,90 oitavas
 Filtro de 4ª ordem: 69,5 dB de rejeição
 ```
 
-A margem de acomodação justifica os `3 MS/s` em vez dos `5 MS/s` de uma estimativa direta: o período de `200 ns` a 5 MS/s oferece apenas **1,33 vezes** o tempo típico de 150 ns, sobre um parâmetro que o fabricante *não garante com valor máximo*. Um critério defensável é de 2,5 a 3 vezes.
+Os `3 MS/s` derivam da margem de acomodação. O período de `333 ns` oferece **2,2 vezes** o tempo típico de 150 ns, sobre um parâmetro que o fabricante *não garante com valor máximo*.
 
 > Nessa versão a ausência de registrador de entrada persiste. Ou se acrescenta um ***latch* externo de 8 bits** comandado pelo mesmo sinal que dispara o DMA, ou a degradação é aceita e documentada.
-
-### Vantagens do conversor da versão final
-
-- **Alimentação mais simples.** Fonte única, sem o trilho negativo que o DAC0808 exige.
-- **Sem deslocamento de nível.** O trilho digital pode ser `3,3 V`, ligado diretamente ao microcontrolador.
-- **Menor acoplamento digital.** Operar com excursão lógica reduzida diminui o *feedthrough* de dados e o ruído interno do conversor.
-
-Nenhum desses componentes está disponível em encapsulamento DIP. Para montagem manual, prefira **SOIC** (passo de `1,27 mm`) a **TSSOP** (`0,65 mm`).
 
 ---
 
@@ -98,9 +104,9 @@ Nenhum desses componentes está disponível em encapsulamento DIP. Para montagem
 
 > ⚠️ As taxas de saída paralela são **estimativas de arquitetura**, não valores de folha de dados. Nenhum fabricante especifica taxa máxima de saída paralela para síntese de forma de onda. Todas exigem *confirmação em bancada* com analisador lógico.
 
-### Escolha: STM32G474
+### Justificativa da escolha
 
-O **STM32G474** foi selecionado por ser o único candidato projetado explicitamente para aplicações de *sinal misto*.
+O **STM32G474** é o único candidato projetado explicitamente para aplicações de *sinal misto*.
 
 - Seus **7 conversores** e **7 comparadores** internos, contra 2 e 2 do STM32H743, resolvem o offset, os limiares do caminho da onda retangular e ainda deixam canais livres para proteção e detecção de sobrecarga.
 - O **domínio de alimentação único** é consideravelmente mais simples de projetar que os múltiplos domínios com sequenciamento do H743.
