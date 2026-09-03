@@ -62,9 +62,9 @@ Os componentes adequados para esta função pertencem a uma classe de conversore
 
 | Conversor | Características | Avaliação |
 | :--- | :--- | :--- |
-| **AD5689** | 2 canais, 16 bits, saída em tensão, comunicação SPI [2] | ❌ ***Descartado.*** A atualização serial e o tempo de acomodação limitam a taxa a valores muito abaixo dos 10 MS/s. A resolução de 16 bits favorece a precisão, mas não compensa a limitação de velocidade. |
-| **DAC0808** | 8 bits, entrada paralela, saída em corrente, acomodação típica de 150 ns [3] | ❌ ***Descartado.*** Resolução de `50 dB` contra os `74 dB` necessários, ausência de registrador de entrada, *glitch* não especificado, e acomodação típica de `150 ns` incompatível com o período de `100 ns` — valor sem máximo garantido. |
-| **DAC902** | 12 bits, 165 MS/s, *latch* por borda, arquitetura segmentada, *glitch* de 3 pV·s, saída diferencial em corrente, referência interna, alimentação única | ✅ ***Escolhido.*** |
+| **AD5689** | 2 canais, 16 bits, saída em tensão, comunicação SPI [2] | ***Descartado.*** A atualização serial e o tempo de acomodação limitam a taxa a valores muito abaixo dos 10 MS/s. A resolução de 16 bits favorece a precisão, mas não compensa a limitação de velocidade. |
+| **DAC0808** | 8 bits, entrada paralela, saída em corrente, acomodação típica de 150 ns [3] | ***Descartado.*** Resolução de `50 dB` contra os `74 dB` necessários, ausência de registrador de entrada, *glitch* não especificado, e acomodação típica de `150 ns` incompatível com o período de `100 ns` — valor sem máximo garantido. |
+| **DAC902** | 12 bits, 165 MS/s, *latch* por borda, arquitetura segmentada, *glitch* de 3 pV·s, saída diferencial em corrente, referência interna, alimentação única | ***Escolhido.*** |
 
 ### Vantagens do conversor escolhido
 
@@ -90,7 +90,7 @@ Os componentes adequados para esta função pertencem a uma classe de conversore
 O **STM32G474** é o único candidato projetado explicitamente para aplicações de *sinal misto*.
 
 1. Seus **7 conversores** e **7 comparadores** internos resolvem o **offset**, os limiares da onda retangular e deixam canais livres para proteção. Isso elimina componentes externos.
-2. O **domínio de alimentação único** é consideravelmente mais simples de projetar.
+2. O **domínio de alimentação único** é consideravelmente mais simples de projetar.✅
 3. A **ausência de cache** elimina erros de coerência em buffers de DMA.
 4. O temporizador de alta resolução de `184 ps` oferece resolução de ciclo de trabalho **onze vezes superior** à do H743.
 
