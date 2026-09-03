@@ -90,7 +90,7 @@ Os componentes adequados para esta função pertencem a uma classe de conversore
 O **STM32G474** é o único candidato projetado explicitamente para aplicações de *sinal misto*.
 
 1. Seus **7 conversores** e **7 comparadores** internos resolvem o **offset**, os limiares da onda retangular e deixam canais livres para proteção. Isso elimina componentes externos.
-2. O **domínio de alimentação único** é consideravelmente mais simples de projetar.✅
+2. O **domínio de alimentação único** é consideravelmente mais simples de projetar.
 3. A **ausência de cache** elimina erros de coerência em buffers de DMA.
 4. O temporizador de alta resolução de `184 ps` oferece resolução de ciclo de trabalho **onze vezes superior** à do H743.
 
