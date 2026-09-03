@@ -120,3 +120,4 @@ Tabela de Onda
                   ↳ Ganho (MDAC)
                     ↳ Offset
                       ↳ Estágio de Saída
+<img width="1600" height="1165" alt="Code_Generated_Image" src="https://github.com/user-attachments/assets/75775d65-e7fd-45a2-896d-3be83f800c89" />
